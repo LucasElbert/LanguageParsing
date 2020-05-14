@@ -27,7 +27,7 @@ Example 2 (test set):
 
 Input sentence: Charles Pasqua accuse même Jospin d'avoir créé un " cabinet noir " , voué à déstabiliser la droite 
 
-Ground truth:
-![example3 ground truth](examples/gt_tree_20.png)
 Prediction:
 ![example3 prediction](examples/parse_tree_20.png)
+Ground truth:
+![example3 ground truth](examples/gt_tree_20.png)
