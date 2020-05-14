@@ -19,13 +19,14 @@ Football en Italiee
 parsed as:
 ( (SENT (NC Football) (PP (P en) (NP (NPP Italie)))))
 ```
-Predicted parse tree:
 ![example1](examples/example1.png)
 
 
 Example 2 (test set):
 
-Input sentence: Charles Pasqua accuse même Jospin d'avoir créé un " cabinet noir " , voué à déstabiliser la droite 
+Input sentence: 
+
+Charles Pasqua accuse même Jospin d'avoir créé un " cabinet noir " , voué à déstabiliser la droite 
 
 Prediction:
 ![example3 prediction](examples/parse_tree_20.png)
