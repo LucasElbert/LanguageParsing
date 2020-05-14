@@ -1,6 +1,5 @@
 # LanguageParsing
-In this project I developed a probabilistic parser for french (or any other) language that is robust to unknown words
-based on a PCFG, the Levenshtein distance, word embeddings and a probabilistic CYK-algorithm. The
+In this project I developed a probabilistic parser for french (or any other) language. The system is robust to unknown words and typos and is based on Probabilistic Context Free Grammars, the Levenshtein distance, word embeddings and a probabilistic CYK-algorithm. The 
 parser is trained on the SEQUOIA database, reads in a sentence and outputs a predicted parse tree.
 
 In an evaluation on the test set of the SEQUOIA database the system achieved 87.7% measured as POS-tag label accuracy.
@@ -21,7 +20,7 @@ parsed as:
 ( (SENT (NC Football) (PP (P en) (NP (NPP Italie)))))
 ```
 Predicted parse tree:
-
+![example1](examples/example1.png")
 
 2.
 Input sentence: Financement illégal du RPR
