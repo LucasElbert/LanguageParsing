@@ -5,7 +5,7 @@ parser is trained on the SEQUOIA database, reads in a sentence and outputs a pre
 In an evaluation on the test set of the SEQUOIA database the system achieved 87.7% measured as POS-tag label accuracy.
 
 ## How to run:
-    1. Start main.py
+    1. python code/main.py
     2. Wait a few seconds to learn the PCFG.
     2. Enter a new sentence to be parsed.
 
