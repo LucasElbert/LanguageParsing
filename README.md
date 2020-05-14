@@ -22,15 +22,6 @@ parsed as:
 Predicted parse tree:
 ![example1](examples/example1.png)
 
-2.
-Input sentence: Financement illégal du RPR
-
-Ground truth:
-![example2 ground truth](examples/gt_tree_4.png)
-Prediction:
-![example2 prediction](examples/parse_tree_4.png)
-
-
 3.
 Input sentence: Charles Pasqua accuse même Jospin d'avoir créé un " cabinet noir " , voué à déstabiliser la droite 
 
