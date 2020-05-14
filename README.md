@@ -11,7 +11,7 @@ In an evaluation on the test set of the SEQUOIA database the system achieved 87.
 
 ## Examples:
 
-1.
+Example 1:
 ```
 python ./code/main.py
 Enter space separated tokens:
@@ -22,7 +22,7 @@ parsed as:
 Predicted parse tree:
 ![example1](examples/example1.png)
 
-3.
+Example 2 (test set):
 Input sentence: Charles Pasqua accuse même Jospin d'avoir créé un " cabinet noir " , voué à déstabiliser la droite 
 
 Ground truth:
