@@ -27,6 +27,7 @@ string Tree<string>::print(int level) {
   return s;
 }
 
+
 template <>
 string Tree<string>::BracketString() {
   if (!HasChildren()) {

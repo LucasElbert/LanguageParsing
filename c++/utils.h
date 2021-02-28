@@ -21,4 +21,9 @@ bool AnyTrue(vector<bool>& values);
 // the found stop_char.
 tuple<int, char, string> ReadUntil(string s, int start, string stop_chars);
 
+// Splits a string at all given token positions
+// Example: split("This is an example!", " ") --> {"This","is","an","example!"}
+vector<string> split(string str, char sep);
+
+
 #endif

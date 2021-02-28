@@ -1,7 +1,7 @@
 /**
  * Probabilistic Constituency Tree Natural Language Parsing
- * 
- * Author: Lucas Elbert 
+ *
+ * Author: Lucas Elbert
  */
 
 #include <iostream>
@@ -30,10 +30,9 @@ shared_ptr<Tree<string> > foo() {
   return t1;
 }
 
-int main() { 
+int main() {
   ifstream infile("../data/sequoia-corpus+fct.mrg_strict");
   string line;
-
   vector<shared_ptr<Tree<string> > > trees;
   while (getline(infile, line)) {
     shared_ptr<Tree<string> > t = ParseTree(line);
@@ -44,7 +43,7 @@ int main() {
   }
   printf("\nnumber of trees: %d\n",trees.size());
   printf("InferePCFG\n");
-  
+
   PCFG pcfg = InferePCFG(trees);
   printf("# vocab: %d\n", pcfg.lexicon_.size());
   printf("# non terms: %d\n", pcfg.non_terminals_.size());
@@ -52,7 +51,9 @@ int main() {
 
 
   // Read a new sentence from command line
-  vector<string> new_sentence = vector<string>({"bliblablu","blub","asdkf"});
-  Tree<string>* t = pcfg.ParseSentence(new_sentence);
+  line = "Cette exposition nous apprend que une industrie métallurgique existait .";
+  vector<string> tokens = split(line, ' ');
+
+  Tree<string>* t = pcfg.ParseSentence(tokens);
   //DenormalizeTree(&t);
 }

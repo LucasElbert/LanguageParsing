@@ -1,6 +1,7 @@
 #include "pcfg.h"
 #include "tree.h"
 
+
 Rule::Rule(string left, string right) {
   left_ = left;
   right_ = vector<string>{right};
@@ -43,7 +44,7 @@ PCFG::PCFG(set<string>& non_terminals, set<string>& pos_tags,
   grammar_probs_ = grammar_probs;
 
   // Construct the reverse lexicon
-  // from which POS-tags can each word be produced, and with which probabilitiy?
+  // Which POS-tags can each word be produced from, and with which probabilitiy?
   for (string word : lexicon_) {
     reverse_lexicon_[word] = vector<pair<string, double> >();
   }
@@ -56,25 +57,34 @@ PCFG::PCFG(set<string>& non_terminals, set<string>& pos_tags,
   }
 
   // Construct the reverse grammar
-  // From which Nonterminals can
-  //  - binary Nonterminal pairs
-  //  - POS-tags
-  // be constructed and with which probability?
+  // From which NonTerminals can other NonTerminals or POS-Tags be generated 
+  // and with which probability?
   for (auto const& it : grammar_probs_) {
     bool is_binary_rule = it.first.right_.size() == 2;
     bool is_single_rule = it.first.right_.size() == 1;
     // Our grammar is in Chomsky Normal Form, therefore the right handside
-    // always has either 2 non terminals or a single pos-tag
+    // always has either 2 NonTerminals or a single PosTag
     if (is_binary_rule) {
       Rule const& rule = it.first;
-      pair<string, string> right =
-          pair<string, string>(rule.right_[0], rule.right_[1]);
+      auto generated = pair<string, string>(rule.right_[0], rule.right_[1]);
+      NonTerm generated_left = rule.right_[0];
+      NonTerm generated_right = rule.right_[1];
       double probability = it.second;
-      pair<string, double> entry(rule.left_, probability);
-      if (reverse_grammar_binary_.count(right) == 0) {
-        reverse_grammar_binary_[right] = vector<pair<string, double> >();
+      pair<Rule, double> entry(rule, probability);
+
+      if (reverse_grammar_binary_.count(generated) == 0) {
+        reverse_grammar_binary_[generated] = vector<pair<Rule, double> >();
       }
-      reverse_grammar_binary_[right].push_back(entry);
+      if (generate_left.count(generated_left) == 0) {
+        generate_left[generated_left] = vector<pair<Rule, double> >();
+      }
+      if (generate_right.count(generated_right) == 0) {
+        generate_right[generated_right] = vector<pair<Rule, double> >();
+      }
+      
+      generate_right[generated_right].push_back(entry);
+      generate_left[generated_left].push_back(entry);
+      reverse_grammar_binary_[generated].push_back(entry);
     } else if (is_single_rule) {
       double probability = it.second;
       string pos_tag = it.first.right_[0];
@@ -88,7 +98,7 @@ PCFG::PCFG(set<string>& non_terminals, set<string>& pos_tags,
   }
 }
 
-vector<pair<string, double> > PCFG::GetGeneratingNonTerms(string left_nt,
+vector<pair<Rule, double> > PCFG::GetGeneratingNonTerms(string left_nt,
                                                           string right_nt) {
   return reverse_grammar_binary_[pair<string,string>(left_nt, right_nt)];
 }
@@ -101,36 +111,199 @@ vector<pair<string, double> > PCFG::GetGeneratingPosTags(string word) {
   return reverse_lexicon_[word];
 }
 
+void print (pTreeProb pTP) {
+  printf("(%s, %f) ", pTP.first->value_.c_str(), pTP.second);
+}
 
-
-void PCFG::BuildTokenRow(vector<string> const & tokens,
-                         vector<vector<pTreeAndProb> >& row) {
-  row.clear();
-  // Lowest row is an exception it just contains the raw tokens
-  for (int i = 0; i < tokens.size(); i++) {
-    auto t = make_shared<Tree<string> >(tokens[i]);
-    pTreeAndProb tree_and_prob(t, 1.0);
-    row.push_back(vector<pTreeAndProb>({tree_and_prob}));
+void printRow(ParseTableRow& row) {
+  printf("size: %i\n", row.size());
+  for (int i = 0; i < row.size(); i++) {
+    printf("Cell %i, size: %i\n", i, row[i].size());
+    for (int j = 0; j < row[i].size(); j++) {
+      print(row[i][j]);
+    }
+    printf("\n");
   }
 }
 
-void PCFG::BuildPosTagRow(vector<vector<pTreeAndProb> > const & token_row,
-                          vector<vector<pTreeAndProb> >& pos_tag_row) {
-  pos_tag_row.clear();
-  for (int i = 0; i < token_row.size(); i++) {
-    vector<pTreeAndProb> pos_tag_row_cell;
-    shared_ptr<Tree<string> > token_tree = token_row[i][0].first;
-    string token = token_tree->value_;
-    vector<pair<string,double> > pos_tags = GetGeneratingPosTags(token);
-    for (pair<string,double> pp : pos_tags) {
-      string pos_tag = pp.first;
-      auto tree = make_shared<Tree<string> >(pos_tag);
-      tree->AddChild(token_tree);
-      double probability = pp.second;
-      pos_tag_row_cell.push_back(pTreeAndProb(tree, probability));
-    }
-    pos_tag_row.push_back(pos_tag_row_cell);
+ParseTableRow PCFG::BuildTokenRow(vector<string> const & tokens) {
+  ParseTableRow row;
+  // Lowest row simply contains the tokens wraped in a tree
+  for (int i = 0; i < tokens.size(); i++) {
+    auto t = make_shared<Tree<string> >(tokens[i]);
+    pTreeProb tree_and_prob(t, 1.0);
+    row.push_back(vector<pTreeProb>({tree_and_prob}));
   }
+  return row;
+}
+
+ParseTableRow PCFG::BuildUnitaryParentRow(
+                              ParseTableRow const & children_row,
+                              SYMBOL_TYPE children_type){
+
+  ParseTableRow parents_row;
+  for (vector<pTreeProb> const & children_cell : children_row) {
+    vector<pTreeProb> parents_cell;
+    for (pTreeProb child_and_prob : children_cell) {
+
+      shared_ptr<Tree<string> > child_tree = child_and_prob.first;
+      string child_symbol = child_tree->value_;
+      vector<pair<string,double> > parent_symbols;
+      
+      if (children_type==POS_TAG) {
+        parent_symbols = GetGeneratingNonTerms(child_symbol);
+      } else if (children_type==TOKEN) {
+        parent_symbols = GetGeneratingPosTags(child_symbol);
+      }
+
+      for (pair<string,double> ps : parent_symbols) {
+        string parent_symbol = ps.first;
+        double probability = ps.second * child_and_prob.second;
+        auto parent_tree = make_shared<Tree<string> >(parent_symbol);
+        parent_tree->AddChild(child_tree);
+        // TODO avoid duplicates
+        // If there already is a tree with the same parent_symbol
+        // only keep the one with higher probability
+        parents_cell.push_back(pTreeProb(parent_tree, probability));
+      }
+    }
+    parents_row.push_back(parents_cell);
+  }
+  return parents_row;
+}
+
+/**
+ * Creates a new tree from the 
+ */
+pTreeProb PCFG::BuildParentTree(NonTerm generator_symbol,
+                                double generation_prob,
+                                pTreeProb left_child,
+                                pTreeProb right_child) {
+
+  shared_ptr<Tree<string> > left_tree = left_child.first;
+  double left_prob = left_child.second;
+  
+  shared_ptr<Tree<string> > right_tree = right_child.first;
+  double right_prob = right_child.second;
+
+  auto new_tree = make_shared<Tree<string> >(generator_symbol);
+  new_tree->AddChild(left_tree);
+  left_tree->parent_ = new_tree->weak_from_this();
+  new_tree->AddChild(right_tree);
+  right_tree->parent_ = new_tree->weak_from_this();
+  double new_prob = generation_prob * left_prob * right_prob;
+  
+  return pTreeProb(new_tree, new_prob);
+}
+
+/**
+ * Creates new trees from all PCFG known rules "NT -> (A,B)" with
+ * A a root symbol of a tree in 'left' and
+ * B a root symbol of a tree in 'right'
+ * 
+ * Returns a vector of all those trees (with multiplied probabilities)
+ * 
+ * If a NonTerminal has several generation possibilities only the one with
+ * highest probability is returned
+ */
+vector<pTreeProb> PCFG::BuildParentTrees(vector<pTreeProb> left, 
+                                         vector<pTreeProb> right) {
+  // Find symbols that can generate symbols in left and right cells
+  // Mapping is a bit complicated because the symbol search is string based
+  // but the cells contain tree structures. So we need a mapping 
+  // from strings to Trees.
+  map<string,pTreeProb> left_targets;
+  std::set<pair<Rule, double> > generators_left;
+  for (pTreeProb ptp : left_cell) {
+    string node_symbol = ptp.first->value_;
+    left_targets[node_symbol] = ptp;
+    auto generators = generate_left[node_symbol];
+    generators_left.insert(generators.begin(), generators.end());
+  }
+  map<string, pTreeProb> right_targets;
+  std::set<pair<Rule, double> > generators_right;
+  for (pTreeProb ptp : right_cell) {
+    string node_symbol = ptp.first->value_;
+    right_targets[node_symbol] = ptp;
+    auto generators = generate_right[node_symbol];
+    generators_right.insert(generators.begin(), generators.end());
+  }
+
+  vector<pair<Rule, double> > generators;
+  std::set_intersection(generators_left.begin(), generators_left.end(),
+                        generators_right.begin(), generators_right.end(),
+                        std::back_inserter(generators));
+  
+  map<NonTerm, pTreeProb> parent_trees;
+  // Create a new tree for every found generator
+  for (pair<Rule, double> generator : generators) {
+    NonTerm generator_symbol = generator.first.left_;
+    double generator_probability = generator.second;
+    pTreeProb left_child = left_targets[r.right_[0]];
+    pTreeProb right_child = right_targets[r.right_[1]];
+    pTreeProb parent = CreateParentTree(generator_symbol,
+                                        generator_probability,
+                                        left_child, 
+                                        right_child);
+    
+    bool new_symbol = parent_trees.find(generator_symbol) == parent_trees.end();
+    bool higher_probability = false;
+    if (!new_symbol) {
+      higher_probability = parent_trees[generator_symbol].second < parent.second;
+    }
+    if (new_symbol || higher_probability) {
+      parent_trees[generator_symbol] = parent;
+    }
+  }
+
+
+  return parent_trees;
+}
+
+/**
+ * Generates the next row in a valid CYK table
+ * 
+ * Table is expected to be a CYK table that stores possible symbols to generate tokens
+ * table[0] stores the tokens itself. table[1] the POS-Tags that can generate
+ * the tokens. All cells above S_(start,end) stores symbols that can eventually
+ * generate token_start, ..., token_end
+ * 
+ * 
+ * * ------- GENERATE THE NEXT TOP ROW -----
+ *   ...             ...        ...   
+ * table[4] ->  |  S_(0,2)  |  S_(1,3)   |  S_(2,4)   |
+*  table[3] ->  |  S_(0,1)  |  S_(1,2)   |  S_(2,3)   |  S_(3,4)   |
+ * table[2] ->  |  S_(0,0)  |  S_(1,1)   |  S_(2,2)   |  S_(3,3)   |  S_(4,4)   |
+ * table[1] ->  |  POS-Tags |  POS-Tags  |  POS-Tags  |  POS-Tags  |  POS-Tags  | 
+ * table[0] ->  |  token_0  |  token_1   |  token_2   |  token_3   |  token_4   |   
+ */
+ParseTableRow PCFG::BuildBinaryParentRow(vector<ParseTableRow> const & table) {
+  ParseTableRow row;
+  int n_cells = table.back().size()-1;
+  int generation_length = table.size()-1;
+  int sentence_length = table[0].size();
+  printf("n_cells %i\n generation_length %i\n", n_cells, generation_length);
+  for (int start = 0; start <= sentence_length - generation_length; start++) {
+    // Create and fill the cell S_(start, end)
+    int end = start+generation_length-1;
+    map<NonTerm, pTreeProb> cell;
+    // Find Rules of the form (N -> (A,B)) with 
+    // A in S_(start,left_end) and B in S_(left_end+1,end)
+    for (int left_end = start; left_end < end; left_end++ ){
+      int left_length = left_end - start+1;
+      int right_length = end-left_end;
+      vector<pTreeProb> const & left_cell = table[left_length+1][start];
+      vector<pTreeProb> const & right_cell = table[right_length+1][left_end+1];
+      
+      vector<pTreeProb> parent_trees = BuildParentTrees(left_cell, right_cell);
+      for (pTreeProb parent_tree : parent_trees) {
+        
+      }
+      cell.insert(cell.end(), parent_trees.begin(), parent_trees.end());      
+    }
+    row.push_back(cell);
+  }
+  return row;
 }
 
 
@@ -144,37 +317,39 @@ We fill a table where cell (y,x) contains trees that can dissolve to
 create tokens (t[x],...,t[x+y-1])
 */
 Tree<string>* PCFG::ParseSentence(vector<string> tokens) { 
-  vector<vector<vector<pTreeAndProb> > > table(tokens.size());
+  printf("\n%i tokens\n", tokens.size());
+  vector<ParseTableRow> table;
 
   // Lowest row simply contains the tokens wraped in trees
-  // BuildTokenRow(tokens, table[0]);
+  // (Later add spelling correction)
+  table.push_back(BuildTokenRow(tokens));
 
   // Second lowest row contains Pos-Tags that generate the tokens
-  // BuildPosTagRow(table[0], table[1]);
-
+  table.push_back(BuildUnitaryParentRow(table[0], TOKEN));
+  
   // Third lowest row contains NonTerminals that generate the Pos-Tags
   // By unitary rules
+  table.push_back(BuildUnitaryParentRow(table[1], POS_TAG));
   
-  // Higher rows contain non terminals that appropriately generate symbols in
-  // lower rows
-  for (int level=3; level < tokens.size()+2; level++) {
-    ;
+  // Higher rows contain non terminals that generate the symbols in
+  // lower rows. Elements of the lowest row (table[2]) generate single POS-Tags,
+  // which generate single tokens.
+  // Elements on level x eventually dissolve into x-1 tokens
+  for (int level=3; level <= tokens.size()+1; level++) {
+    printf("table[%i]\n", level);
+    table.push_back(BuildBinaryParentRow(table));
   }
 
-
-  
-  return nullptr;
-  
-
-  
-  
-  for (int length=2; length <= tokens.size(); length++) {
-    for(int offset=0; offset <= tokens.size()-length; offset++) {
-      // Fill cell (y,x), i.e. non terms that can create tokens t_x,...,t_(x+y)
+  int count_trees = 0;
+  for (ParseTableRow row : table) {
+    for (vector<pTreeProb> cell : row) {
+      count_trees += cell.size();
     }
-    // Non-terms on level i that can create non-terms on level i+1
   }
-  
+  printf("num_trees: %i\n",count_trees);
+  return nullptr;
+  //pTreeProb ptb = GetMostLikelyTree(table.back()[0]);
+  //return ptb.first;
 }
 
 void extract_rules(Tree<std::string>* t, vector<Rule>& grammar_rules,

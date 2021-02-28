@@ -2,9 +2,10 @@
 #define PCFG_H
 
 #include <map>
-#include <string>
 #include <set>
+#include <string>
 #include <vector>
+#include <functional>
 
 #include "tree.h"
 
@@ -16,8 +17,9 @@ using std::set;
 using std::pair;
 
 typedef string NonTerm;
-typedef string POS;
+typedef string PosTag;
 typedef string Token;
+typedef vector<vector<pTreeProb> > ParseTableRow;
 
 // Represents a rule of a probabilistic context free grammar
 // left_: left handside of a rule
@@ -34,6 +36,12 @@ struct Rule {
 bool operator==(const Rule& r1, const Rule& r2);
 bool operator!=(const Rule& r1, const Rule& r2);
 bool operator<(const Rule& r1, const Rule& r2);
+
+typedef enum{
+  NON_TERMINAL = 0,
+  POS_TAG = 1,
+  TOKEN = 2,
+} SYMBOL_TYPE;
 
 // This PCFG implementation is strictly speaking a mix of two PCFGs
 // I find it more natural this way to construct MLE constituency trees,
@@ -54,20 +62,23 @@ class PCFG {
   map<Rule, double> grammar_probs_;
   map<Rule, double> lexicon_probs_;
 
-  // Structures to help reverse searching for rules
-  // Maps words onto POS-tags that can produce them with a certain probability.
-  map<string, vector<pair<string, double> > > reverse_lexicon_;
-  // Maps onto NonTerm that can binarily produce the given string pair.
-  map<pair<string, string>, vector<pair<string, double> > > reverse_grammar_binary_;
-  map<string, vector<pair<string, double> > > reverse_grammar_single_;
+  // Structures to help reverse searching for rules when given a 
+  // Token / POSTag / NonTerm that shall be generated. Gives possible
+  // Generators with corresponding generation probabilities.
+  map<Token, vector<pair<PosTag, double> > > reverse_lexicon_;
+  map<PosTag, vector<pair<NonTerm, double> > > reverse_grammar_single_;
+  map<pair<NonTerm, NonTerm>, vector<pair<Rule, double> > >
+      reverse_grammar_binary_;
+  // ? -> (NonTerm, .),  ? -> (., NonTerm)
+  map<NonTerm, vector<pair<Rule, double> > > generate_left;
+  map<NonTerm, vector<pair<Rule, double> > > generate_right;
 
-  PCFG(set<string>& non_terminals, set<string>& pos_tags,
-       set<string>& vocab, map<Rule, double>& lexicon_probs,
-       map<Rule, double>& grammar_probs);
+  PCFG(set<string>& non_terminals, set<string>& pos_tags, set<string>& vocab,
+       map<Rule, double>& lexicon_probs, map<Rule, double>& grammar_probs);
 
   // Searches for all nonterminals that can generate the given nonterminal pair.
   // Returns these NTs with their probability to dissolve to the given pair.
-  vector<pair<string, double> > GetGeneratingNonTerms(string left_nt,
+  vector<pair<Rule, double> > GetGeneratingNonTerms(string left_nt,
                                                       string right_nt);
   // Searches for all nonterminals that can generate the single pos_tag
   // (pos_tag = terminal of the grammar)
@@ -80,17 +91,18 @@ class PCFG {
   // Computes the Maximum Likelihood Constituency Tree to produce the given
   // sequence of words(=tokens).
   Tree<string>* ParseSentence(vector<string> tokens);
-  void BuildTokenRow(vector<string> const & tokens,
-                     vector<vector<pTreeAndProb> >& row);
-  void BuildPosTagRow(vector<vector<pTreeAndProb> > const & token_row,
-                          vector<vector<pTreeAndProb> >& pos_tag_row);
-};
 
+ private:
+  ParseTableRow BuildTokenRow(vector<string> const& tokens);
+  ParseTableRow BuildUnitaryParentRow( 
+          ParseTableRow const & children_row,
+          SYMBOL_TYPE);
+  ParseTableRow BuildBinaryParentRow(vector<ParseTableRow> const & table);
+};
 
 // Inferes a PCFG from the rules of the normalized trees
 // Returns a pointer to that PCFG
 PCFG InferePCFG(vector<shared_ptr<Tree<string> > >& trees);
-
 
 // Extracts all rules from the tree t and inserts them either in
 // grammar_rules or lexicon_rules
@@ -102,11 +114,8 @@ PCFG InferePCFG(vector<shared_ptr<Tree<string> > >& trees);
 // Nonterminal -> POS-tag
 // Lexicon rules are all branchings of the form
 // POS-tag -> token
-void extract_rules(Tree<std::string>* t, 
-                   vector<Rule>& grammar_rules, 
-                   vector<Rule>& lexicon_rules,
-                   set<string>& vocab,
-                   set<string>& pos_tags,
-                   set<string>& non_terminals,
+void extract_rules(Tree<std::string>* t, vector<Rule>& grammar_rules,
+                   vector<Rule>& lexicon_rules, set<string>& vocab,
+                   set<string>& pos_tags, set<string>& non_terminals,
                    bool simplify_nonterminals = true);
 #endif

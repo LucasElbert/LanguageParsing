@@ -31,6 +31,7 @@ class Tree: public std::enable_shared_from_this<Tree<T> > {
   Tree() { ; }
   Tree(T value) : value_(value) { ; }
   Tree(T value, weak_ptr<Tree<T> > parent) : value_(value), parent_(parent) { ; }
+  
 
   shared_ptr<Tree<T> > MakeChild(T t);
   void AddChild(shared_ptr<Tree<T> > t);
@@ -55,7 +56,7 @@ class Tree: public std::enable_shared_from_this<Tree<T> > {
 };
 
 // Tree pointer and a probability
-typedef pair<shared_ptr<Tree<string> >,double> pTreeAndProb;
+typedef pair<shared_ptr<Tree<string> >,double> pTreeProb;
 
 // Adds c as a child to this tree. This tree takes (partial) ownership of c!
 template<typename T> void Tree<T>::AddChild(shared_ptr<Tree<T> > c){
@@ -81,6 +82,7 @@ template<typename T> bool HasPreterminalChild(Tree<T>* t) {
   }
   return false;
 }
+
 
 /**
  * Replaces t's preterminal children (POS) by dummy nonterminals (_POS).
