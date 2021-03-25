@@ -143,7 +143,8 @@ ParseTableRow PCFG::BuildUnitaryParentRow(
 
   ParseTableRow parents_row;
   for (vector<pTreeProb> const & children_cell : children_row) {
-    vector<pTreeProb> parents_cell;
+    // map instead of vector to avoid duplicates
+    map<string, pTreeProb> parents_cell;
     for (pTreeProb child_and_prob : children_cell) {
 
       shared_ptr<Tree<string> > child_tree = child_and_prob.first;
@@ -159,15 +160,27 @@ ParseTableRow PCFG::BuildUnitaryParentRow(
       for (pair<string,double> ps : parent_symbols) {
         string parent_symbol = ps.first;
         double probability = ps.second * child_and_prob.second;
+        printf("%.3e = %.3e * %.3e\n", probability, ps.second, child_and_prob.second);
         auto parent_tree = make_shared<Tree<string> >(parent_symbol);
         parent_tree->AddChild(child_tree);
-        // TODO avoid duplicates
-        // If there already is a tree with the same parent_symbol
-        // only keep the one with higher probability
-        parents_cell.push_back(pTreeProb(parent_tree, probability));
+        
+        // Only save one tree per symbol as we search the max likelihood tree
+        bool new_symbol = parents_cell.find(parent_symbol) == parents_cell.end();
+        bool higher_probability = false;
+        if (!new_symbol) {
+          higher_probability = parents_cell[parent_symbol].second < probability;
+        }
+        if (new_symbol || higher_probability) {
+          parents_cell[parent_symbol] = pTreeProb(parent_tree, probability);
+        }
       }
     }
-    parents_row.push_back(parents_cell);
+    vector<pTreeProb> parents_cell_;
+    for (auto it = parents_cell.begin(); it != parents_cell.end(); ++it) {
+      pTreeProb ptb = it->second;
+      parents_cell_.push_back(ptb);
+    }
+    parents_row.push_back(parents_cell_);
   }
   return parents_row;
 }
@@ -192,7 +205,7 @@ pTreeProb PCFG::BuildParentTree(NonTerm generator_symbol,
   new_tree->AddChild(right_tree);
   right_tree->parent_ = new_tree->weak_from_this();
   double new_prob = generation_prob * left_prob * right_prob;
-  
+  printf("%.3e = %.3e * %.3e * %.3e\n", new_prob, generation_prob, left_prob, right_prob);
   return pTreeProb(new_tree, new_prob);
 }
 
@@ -208,13 +221,13 @@ pTreeProb PCFG::BuildParentTree(NonTerm generator_symbol,
  */
 vector<pTreeProb> PCFG::BuildParentTrees(vector<pTreeProb> left, 
                                          vector<pTreeProb> right) {
-  // Find symbols that can generate symbols in left and right cells
+  // Find symbols that can generate tree symbols in left and right
   // Mapping is a bit complicated because the symbol search is string based
   // but the cells contain tree structures. So we need a mapping 
   // from strings to Trees.
   map<string,pTreeProb> left_targets;
   std::set<pair<Rule, double> > generators_left;
-  for (pTreeProb ptp : left_cell) {
+  for (pTreeProb ptp : left) {
     string node_symbol = ptp.first->value_;
     left_targets[node_symbol] = ptp;
     auto generators = generate_left[node_symbol];
@@ -222,7 +235,7 @@ vector<pTreeProb> PCFG::BuildParentTrees(vector<pTreeProb> left,
   }
   map<string, pTreeProb> right_targets;
   std::set<pair<Rule, double> > generators_right;
-  for (pTreeProb ptp : right_cell) {
+  for (pTreeProb ptp : right) {
     string node_symbol = ptp.first->value_;
     right_targets[node_symbol] = ptp;
     auto generators = generate_right[node_symbol];
@@ -239,13 +252,14 @@ vector<pTreeProb> PCFG::BuildParentTrees(vector<pTreeProb> left,
   for (pair<Rule, double> generator : generators) {
     NonTerm generator_symbol = generator.first.left_;
     double generator_probability = generator.second;
-    pTreeProb left_child = left_targets[r.right_[0]];
-    pTreeProb right_child = right_targets[r.right_[1]];
-    pTreeProb parent = CreateParentTree(generator_symbol,
-                                        generator_probability,
-                                        left_child, 
-                                        right_child);
-    
+    Rule rule = generator.first;
+    pTreeProb left_child = left_targets[rule.right_[0]];
+    pTreeProb right_child = right_targets[rule.right_[1]];
+    pTreeProb parent = BuildParentTree(generator_symbol,
+                                       generator_probability,
+                                       left_child, 
+                                       right_child);
+    // Only save one tree per symbol as we search the max likelihood tree
     bool new_symbol = parent_trees.find(generator_symbol) == parent_trees.end();
     bool higher_probability = false;
     if (!new_symbol) {
@@ -256,8 +270,13 @@ vector<pTreeProb> PCFG::BuildParentTrees(vector<pTreeProb> left,
     }
   }
 
+  vector<pTreeProb> parent_trees_;
+  for (auto it = parent_trees.begin(); it != parent_trees.end(); ++it) {
+    pTreeProb ptb = it->second;
+    parent_trees_.push_back(ptb);
+  }
 
-  return parent_trees;
+  return parent_trees_;
 }
 
 /**
@@ -296,16 +315,29 @@ ParseTableRow PCFG::BuildBinaryParentRow(vector<ParseTableRow> const & table) {
       vector<pTreeProb> const & right_cell = table[right_length+1][left_end+1];
       
       vector<pTreeProb> parent_trees = BuildParentTrees(left_cell, right_cell);
-      for (pTreeProb parent_tree : parent_trees) {
-        
+      // Store all new or new most likely trees (only most likely cuz MLE)
+      for (pTreeProb ptb : parent_trees) {
+        NonTerm parent_symbol = ptb.first->value_;
+        bool new_symbol = cell.find(parent_symbol) == cell.end();
+        bool higher_probability = false;
+        if (!new_symbol) {
+          higher_probability = cell[parent_symbol].second < ptb.second;
+        }
+        if (new_symbol || higher_probability) {
+          cell[parent_symbol] = ptb;
+        }
       }
-      cell.insert(cell.end(), parent_trees.begin(), parent_trees.end());      
     }
-    row.push_back(cell);
+    // Convert map to vector, only needed the map to keep maxlikelihood only
+    vector<pTreeProb> cell_;
+    for (auto it = cell.begin(); it != cell.end(); ++it) {
+      pTreeProb ptb = it->second;
+      cell_.push_back(ptb);
+    }
+    row.push_back(cell_);
   }
   return row;
 }
-
 
 /**
 Constructs the Maximum likelihood constituency tree to produce the
@@ -316,7 +348,7 @@ Algorithm overview:
 We fill a table where cell (y,x) contains trees that can dissolve to
 create tokens (t[x],...,t[x+y-1])
 */
-Tree<string>* PCFG::ParseSentence(vector<string> tokens) { 
+shared_ptr<Tree<string> > PCFG::ParseSentence(vector<string> tokens) { 
   printf("\n%i tokens\n", tokens.size());
   vector<ParseTableRow> table;
 
@@ -347,10 +379,24 @@ Tree<string>* PCFG::ParseSentence(vector<string> tokens) {
     }
   }
   printf("num_trees: %i\n",count_trees);
-  return nullptr;
-  //pTreeProb ptb = GetMostLikelyTree(table.back()[0]);
-  //return ptb.first;
+  
+  pTreeProb mle = GetMostLikely(table.back()[0]);
+  printf("%.6e\n",mle.second);
+  return mle.first;
 }
+
+pTreeProb PCFG::GetMostLikely(vector<pTreeProb> ptbs) {
+  pTreeProb best;
+  double best_probability = -1;
+  for (pTreeProb ptb : ptbs) {
+    if (ptb.second > best_probability) {
+      best = ptb;
+      best_probability = ptb.second;
+    }
+  }
+  return best;
+}
+
 
 void extract_rules(Tree<std::string>* t, vector<Rule>& grammar_rules,
                    vector<Rule>& lexicon_rules, set<string>& vocab,
@@ -410,9 +456,9 @@ void CountsToProbabilities(vector<Rule>& rules, map<Rule, double>& out) {
 
   for (Rule r : rules) {
     if (left_handside_count.find(r.left_) == left_handside_count.end()) {
-      left_handside_count[r.left_] = rule_count[r];
+      left_handside_count[r.left_] = 1;
     } else {
-      left_handside_count[r.left_] += rule_count[r];
+      left_handside_count[r.left_]++;
     }
     if (rule_count.find(r) == rule_count.end()) {
       rule_count[r] = 1;
@@ -422,7 +468,8 @@ void CountsToProbabilities(vector<Rule>& rules, map<Rule, double>& out) {
   }
 
   for (Rule r : rules) {
-    out[r] = ((double)rule_count[r]) / left_handside_count[r.left_];
+    double prob = ((double)rule_count[r]) / left_handside_count[r.left_];
+    out[r] = prob;
   }
 }
 

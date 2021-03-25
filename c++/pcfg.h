@@ -90,7 +90,7 @@ class PCFG {
 
   // Computes the Maximum Likelihood Constituency Tree to produce the given
   // sequence of words(=tokens).
-  Tree<string>* ParseSentence(vector<string> tokens);
+  shared_ptr<Tree<string> > ParseSentence(vector<string> tokens);
 
  private:
   ParseTableRow BuildTokenRow(vector<string> const& tokens);
@@ -98,6 +98,14 @@ class PCFG {
           ParseTableRow const & children_row,
           SYMBOL_TYPE);
   ParseTableRow BuildBinaryParentRow(vector<ParseTableRow> const & table);
+  pTreeProb BuildParentTree(NonTerm generator_symbol,
+                            double generation_prob,
+                            pTreeProb left_child,
+                            pTreeProb right_child);
+  vector<pTreeProb> BuildParentTrees(vector<pTreeProb> left, 
+                                           vector<pTreeProb> right);
+  pTreeProb GetMostLikely(vector<pTreeProb> ptbs);
+
 };
 
 // Inferes a PCFG from the rules of the normalized trees

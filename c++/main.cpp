@@ -54,6 +54,6 @@ int main() {
   line = "Cette exposition nous apprend que une industrie métallurgique existait .";
   vector<string> tokens = split(line, ' ');
 
-  Tree<string>* t = pcfg.ParseSentence(tokens);
+  shared_ptr<Tree<string> > t = pcfg.ParseSentence(tokens);
   //DenormalizeTree(&t);
 }
